@@ -6,26 +6,29 @@ app = Flask(__name__)
 # 從環境變數中獲取 LINE API Key (此變數僅用於列印，不影響 Webhook 邏輯)
 LINE_API_KEY = os.environ.get("API_KEY")
 
-# --- Webhook 路由 (The Core Logic) ---
 @app.route("/", methods=["POST"])
 def webhook():
     # 接收 Dialogflow CX 傳送過來的 JSON 數據
     req = request.get_json(silent=True, force=True)
     
-    # 注意：這裡的 user_message 是 Webhook 進行邏輯判斷的唯一依據
-    user_message = req.get("text")
-
+    # 修正：使用 .get() 並提供一個安全的預設值 "" (空字串)，然後再使用 .strip() 清理空格
+    user_message = req.get("text", "").strip() # <-- 關鍵修正點：確保 user_message 永遠是字串
+    
+    # 預設的回覆 (如果沒有匹配到任何邏輯)
+    response_text = "抱歉，助理已啟動，但我無法從您的查詢中找到有效的指令關鍵詞。"
     line_message_json = None
     
-    # --- 邏輯 D: 守門員回覆（若只輸入喚醒詞）---
-    if "彩虹城市AI助理" in user_message:                  
+    # --- 邏輯判斷：確保 user_message 是字串後，才可以進行 'in' 判斷 ---
+    # 因為前面我們使用了 .get("", "").strip()，所以這裡可以安全地執行 'in' 判斷
+    if "彩虹城市AI助理" in user_message:        
         dialogflow_cx_response = {
             "fulfillmentResponse": {
-                "messages": [{"payload": {"line": line_message_json}}]
+                "messages": [{"text": {"text": [response_text]}}]
             }
         }
         return jsonify(dialogflow_cx_response)
-    return "OK", 200
+    else:
+        return ""
 
 
 # --- Health Check 路由 ---
