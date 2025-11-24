@@ -1,0 +1,35 @@
+steps:
+  # 步驟 1: 建構容器映像檔 (強制使用 _TAG 變數)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/fei:${_TAG}' # 使用 _TAG 外部變數作為標籤
+      - '.'
+    id: Build
+
+  # 步驟 2: 部署到 Cloud Run 
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - gcloud
+      - run
+      - deploy
+      - fei
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/fei:${_TAG}' # 使用 _TAG 變數
+      - '--region'
+      - 'europe-west1'
+      - '--platform'
+      - 'managed'
+      # --- Secret 注入格式 ---
+      - '--set-secrets=API_KEY=line-ai-api-key:latest'
+      - '--set-secrets=ASSERTION_KEY=line-key-id:latest'
+    id: Deploy
+    entrypoint: gcloud
+images:
+  - 'gcr.io/$PROJECT_ID/fei:${_TAG}'
+
+# 最終修正：新增 substititions 區塊
+# 這是為了讓 gcloud builds submit --substitutions 參數能夠匹配
+substitutions:
+  _TAG: 'latest' # 預設值，將被指令覆蓋
