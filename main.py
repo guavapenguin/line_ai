@@ -2,9 +2,8 @@ import os
 import logging
 from flask import Flask, request, jsonify
 from google import genai
-# 最終修正：確保匯入路徑是 google.genai 命名空間下的錯誤類別
-# 如果 APIError 不在 google.genai.errors 中，則嘗試從 google.genai 頂層匯入
-from google.genai.errors import APIError  
+# 最終修正：移除對特定錯誤類別 (APIError) 的明確匯入，
+# 以避免 ModuleNotFoundError，並使用通用的 Exception 處理。
 
 # 設置日誌記錄
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,7 +25,7 @@ if GEMINI_API_KEY:
         ai_client = genai.Client(api_key=GEMINI_API_KEY)
         logger.info("Gemini Client initialized successfully.")
     except Exception as e:
-        # 使用修正後的 APIError 類別
+        # 使用最通用的 Exception 捕獲，確保服務不會在啟動時崩潰
         logger.error(f"Failed to initialize Gemini Client: {e}")
         ai_client = None
 else:
@@ -59,15 +58,10 @@ def webhook():
             )
             response_text = ai_response.text
             
-        except APIError as e:
-            # 處理 API 級別的錯誤
-            logger.error(f"Gemini API Error: {e}")
-            response_text = "AI 服務呼叫失敗。請檢查 API 金鑰或配額設定。"
-            
         except Exception as e:
-            # 處理其他運行時錯誤
-            logger.error(f"An unexpected error occurred during AI call: {e}")
-            response_text = "後端系統處理錯誤，請稍後再試。"
+            # 捕獲所有 API 錯誤或運行時錯誤，因為我們無法精確匯入 APIError
+            logger.error(f"AI Call Error: {e}. Full traceback not visible here.")
+            response_text = "AI 服務呼叫失敗。請檢查 API 金鑰或配額設定。"
     else:
         # 如果 AI client 未初始化，返回默認的檢查訊息
         response_text = f"您說了：'{user_message}'。這是來自 Cloud Run 的測試回應。AI 功能目前處於離線狀態 (Key未配置)。"
