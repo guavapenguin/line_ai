@@ -1,6 +1,6 @@
 Flask
 google-genai
-google-generativeai
 google-cloud-dialogflow-cx
 # 確保安裝最新的 Python SDK 相關依賴
+
 
