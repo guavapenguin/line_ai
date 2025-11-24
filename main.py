@@ -4,59 +4,94 @@ from flask import Flask, request, jsonify
 app = Flask(__name__)
 LINE_API_KEY = os.environ.get("API_KEY")
 
-# 輔助函數：生成 LINE Quick Reply 訊息
-def create_quick_reply(text, options):
-    items = []
-    for label, postback_text in options:
-        items.append({
-            "type": "action",
-            "action": {"type": "message", "label": label, "text": postback_text}
+# 輔助函數：生成 LINE Flex Message 範例 (用於 MBTI 結果)
+def create_mbti_flex_message(result_text, query):
+    # 這裡放 Flex Message 的 JSON 內容... (略，沿用上次的複雜 JSON 結構)
+    return {
+      "type": "flex",
+      "altText": "樂團MBTI分析結果",
+      "contents": {
+        "type": "bubble",
+        "body": {
+          "type": "box",
+          "layout": "vertical",
+          "contents": [
+            {"type": "text", "text": "樂團 MBTI 數據分析", "weight": "bold", "size": "xl"},
+            {"type": "separator", "margin": "md"},
+            {"type": "text", "text": f"分析請求: {query}", "margin": "md", "size": "sm", "color": "#aaaaaa"},
+            {"type": "text", "text": result_text, "wrap": True, "margin": "md", "size": "lg", "color": "#1DB446"},
+            {"type": "text", "text": "數據來自您的樂團資料。", "margin": "md", "size": "xxs", "color": "#aaaaaa"}
+          ]
+        }
+      }
+    }
+
+# 輔助函數：生成 LINE Carousel 訊息 (用於連結查詢)
+def create_link_carousel_message(links_data):
+    # 模擬生成一個 Carousel (輪播) 訊息，展示多個連結
+    columns = []
+    for title, url in links_data:
+        columns.append({
+          "thumbnailImageUrl": "https://example.com/link_icon.png", # 替換為實際圖片URL
+          "title": title,
+          "text": f"點擊查看 {title} 文件",
+          "actions": [
+            {
+              "type": "uri",
+              "label": "開啟連結",
+              "uri": url
+            }
+          ]
         })
     return {
-        "type": "text",
-        "text": text,
-        "quickReply": {"items": items}
+        "type": "template",
+        "altText": "重要連結清單",
+        "template": {
+            "type": "carousel",
+            "columns": columns
+        }
     }
+
 
 @app.route("/", methods=["POST"])
 def webhook():
     req = request.get_json(silent=True, force=True)
-    # print(f"Received Dialogflow CX request: {req}")
-
-    # --- Step 1: 解析關鍵上下文 ---
-    tag = req.get("tag")
+    tag = req.get("tag") 
     user_message = req.get("text", "未知的輸入")
     
-    response_text = f"抱歉，後端程式碼無法識別標籤 '{tag}'，請檢查路由設定。"
+    response_text = "抱歉，無法識別您的樂團助理請求，請確保您包含『彩虹城市AI助理』和明確的查詢內容。"
     line_message_json = None
     
-    # --- Step 2: 根據 Tag 加入業務邏輯判斷 ---
-
-    if tag == "initial_greeting":
-        # 邏輯 A: 剛進入對話，提供樂團相關服務選項
+    # --- 邏輯 A: MBTI 查詢 (Tag: direct_mbti_query) ---
+    if tag == "direct_mbti_query":
+        # 這裡應該是調用你的數據分析服務
+        result_text = "根據樂團歷史數據推算，您的團員在時間管理上存在分歧，可能與你們的『處女座INTJ』團員對細節的極致要求有關。建議使用數據整合工具來平衡排練時間。"
+        line_message_json = create_mbti_flex_message(result_text, user_message)
+        response_text = "MBTI 分析結果已完成。"
         
-        # 使用你提供的樂團相關選項清單
-        options = [
-            ("樂團MBTI分析", "我想看樂團MBTI分析結果"),
-            ("繳費查詢", "我想查詢繳費狀態"),
-            ("連結查詢", "我想查詢連結清單")
+    # --- 邏輯 B: 繳費查詢 (Tag: direct_payment_query) ---
+    elif tag == "direct_payment_query":
+        # 這裡應該是呼叫外部資料庫或 API 進行查詢
+        member_id = "0711" # 假設你已經從 CX 參數中解析出團員ID
+        status = "已繳清"
+        due_date = "2026/01/15 (下一期)"
+        
+        response_text = f"團員 ID {member_id} 的最新繳費狀態：\n**目前狀態：{status}**。\n下一期費用將於 {due_date} 產生。如有疑問，請聯繫行政組。"
+
+    # --- 邏輯 C: 連結查詢 (Tag: direct_links_query) ---
+    elif tag == "direct_links_query":
+        # 提供樂團重要連結數據
+        links_data = [
+            ("排練時間表", "https://docs.google.com/schedule_doc"),
+            ("樂譜雲端", "https://drive.google.com/score_folder"),
+            ("行政會議紀錄", "https://notion.so/meeting_notes")
         ]
-        
-        response_text = "歡迎使用樂團助理服務！我可以協助您進行樂團成員數據分析與行政事務查詢。請問您需要哪項協助？"
-        line_message_json = create_quick_reply(response_text, options)
-        
-    # --- 其他 tag 判斷 (例如 query_mbti, query_payment, query_links) ---
-    # 你應該在 CX 中為這些 text (例如 "我想看樂團MBTI分析結果") 設定新的 Intent 和 Webhook Tag
-    elif tag == "query_mbti":
-        response_text = "要進行MBTI分析，我需要所有團員的MBTI類型數據。請您提供資料，我將推算出樂團的合作機率和潛在衝突點。"
-        # 這裡可以加入更進階的邏輯，例如要求用戶輸入團員名單
-        line_message_json = create_quick_reply(response_text, [("提供數據", "開始輸入MBTI資料")])
+        line_message_json = create_link_carousel_message(links_data)
+        response_text = "樂團重要連結清單已傳送，請使用輪播訊息查看。"
 
-    elif tag == "query_payment":
-        # 這裡可以呼叫外部 API 查詢資料庫
-        response_text = "請輸入您的團員編號，我將為您查詢最近一次的繳費狀態和截止日期。"
 
-    # --- Step 3: 構建 Dialogflow CX 期望的回應格式 ---
+    # --- 構建 Dialogflow CX 期望的回應格式 ---
+    # (此部分保持不變，根據是否有 Custom Payload 來回傳)
     if line_message_json:
         dialogflow_cx_response = {
             "fulfillmentResponse": {
@@ -64,6 +99,7 @@ def webhook():
             }
         }
     else:
+        # 如果是繳費查詢 (純文字回覆)，則使用 text 格式
         dialogflow_cx_response = {
             "fulfillmentResponse": {
                 "messages": [{"text": {"text": [response_text]}}]
@@ -73,10 +109,3 @@ def webhook():
     return jsonify(dialogflow_cx_response)
 
 # (其餘程式碼不變)
-@app.route("/health", methods=["GET"])
-def health_check():
-    return "OK", 200
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
