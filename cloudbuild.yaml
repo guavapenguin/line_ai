@@ -1,35 +1,37 @@
 steps:
-  # 步驟 1: 建構容器映像檔 (使用 _TAG 確保名稱有效)
+  # 步驟 0: 建構容器映像檔 (強制使用 Dockerfile，避免 Buildpacks 偵測失敗)
+  # 我們使用 $PROJECT_ID 和外部傳入的 _TAG 變數來確保映像檔名稱唯一且有效
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/fei:${_TAG}' 
+      - 'gcr.io/$PROJECT_ID/fei:${_TAG}'
       - '.'
     id: Build
 
-  # 步驟 2: 部署到 Cloud Run (修正 Secret 注入格式)
+  # 步驟 1: 部署到 Cloud Run (修正 gcloud 語法錯誤，並注入所有 Secrets)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    # entrypoint 告訴容器從 'gcloud' 執行檔開始運行
+    entrypoint: gcloud 
     args:
-      - gcloud
       - run
       - deploy
-      - fei
+      - line-ai-backend # 確保服務名稱正確
       - '--image'
-      - 'gcr.io/$PROJECT_ID/fei:${_TAG}'
+      - 'gcr.io/$PROJECT_ID/fei:${_TAG}' # 部署剛剛建構的映像檔
       - '--region'
-      - 'europe-west1'
+      - 'europe-west1' # 確保地區正確
       - '--platform'
       - 'managed'
-      # --- Secret 注入 (每個 Secret 獨立參數) ---
-      - '--set-secrets=API_KEY=line-ai-api-key:latest'
-      - '--set-secrets=kid=kid:latest'
-      - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest'
+      - '--set-secrets=API_KEY=line-ai-api-key:latest' # LINE API Key
+      - '--set-secrets=kid=kid:latest' # LINE kid
+      - '--set-secrets=GEMINI_API_KEY=gemini-api-key:latest' # Gemini Key
     id: Deploy
-    entrypoint: gcloud
+
+# 外部可替換變數 (必須在 gcloud builds submit 時傳遞)
+substitutions:
+  _TAG: 'latest' # 預設值，但我們會在指令中覆寫它
+
+# 確保建構完成的映像檔名稱符合 Docker 命名規範
 images:
   - 'gcr.io/$PROJECT_ID/fei:${_TAG}'
-
-# 變數宣告：允許我們在指令行傳遞 _TAG 變數
-substitutions:
-  _TAG: 'latest'
