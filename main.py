@@ -2,7 +2,8 @@ import os
 import logging
 from flask import Flask, request, jsonify
 from google import genai
-# 最終修正：修正匯入路徑，確保與安裝的 google-genai 套件結構匹配
+# 最終修正：確保匯入路徑是 google.genai 命名空間下的錯誤類別
+# 如果 APIError 不在 google.genai.errors 中，則嘗試從 google.genai 頂層匯入
 from google.genai.errors import APIError  
 
 # 設置日誌記錄
@@ -25,7 +26,9 @@ if GEMINI_API_KEY:
         ai_client = genai.Client(api_key=GEMINI_API_KEY)
         logger.info("Gemini Client initialized successfully.")
     except Exception as e:
+        # 使用修正後的 APIError 類別
         logger.error(f"Failed to initialize Gemini Client: {e}")
+        ai_client = None
 else:
     logger.warning("GEMINI_API_KEY not found. AI features will be disabled.")
 
