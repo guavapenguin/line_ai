@@ -24,9 +24,11 @@ def webhook():
                 "messages": [{"payload": {"line": line_message_json}}]
             }
         }
-   
-    return jsonify(dialogflow_cx_response)
+        return jsonify(dialogflow_cx_response)
+    return "OK", 200
 
+
+# --- Health Check 路由 ---
 
 @app.route("/health", methods=["GET"])
 def health_check():
