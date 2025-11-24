@@ -21,12 +21,7 @@ def webhook():
     # --- 邏輯判斷：確保 user_message 是字串後，才可以進行 'in' 判斷 ---
     # 因為前面我們使用了 .get("", "").strip()，所以這裡可以安全地執行 'in' 判斷
     if "彩虹城市AI助理" in user_message:        
-        dialogflow_cx_response = {
-            "fulfillmentResponse": {
-                "messages": [{"text": {"text": [user_message]}}]
-            }
-        }
-        return jsonify(dialogflow_cx_response)
+        return user_message
     else:
         return ""
 
@@ -43,4 +38,5 @@ if __name__ == "__main__":
     # 根據 Cloud Run 的環境變數設定 PORT
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+
 
