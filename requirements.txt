@@ -1,5 +1,4 @@
 Flask
-# ----- 必備的 Google Cloud/AI 套件 -----
+google-genai
 google-cloud-dialogflow-cx
-google-genai # 或 google-cloud-aiplatform, 取決於您使用哪個 SDK 呼叫 Gemini
-# ----------------------------------------
+# 確保安裝最新的 Python SDK 相關依賴
