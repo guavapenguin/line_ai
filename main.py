@@ -1,95 +1,93 @@
 import os
-import logging
 from flask import Flask, request, jsonify
-from google import genai
-# 最終修正：移除對特定錯誤類別 (APIError) 的明確匯入，
-# 以避免 ModuleNotFoundError，並使用通用的 Exception 處理。
-
-# 設置日誌記錄
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# --- 環境變數設置 (通過 Cloud Run Secrets 注入) ---
-# LINE/Gemini API Key
+# 從環境變數中獲取 LINE API Key (保留，但不影響 Webhook 運作)
 LINE_API_KEY = os.environ.get("API_KEY")
-LINE_ASSERTION_KEY = os.environ.get("ASSERTION_KEY")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-
-# 初始化 Gemini Client
-ai_client = None
-if GEMINI_API_KEY:
-    try:
-        # 這裡的 genai 已經是從 from google import genai 來的
-        ai_client = genai.Client(api_key=GEMINI_API_KEY)
-        logger.info("Gemini Client initialized successfully.")
-    except Exception as e:
-        # 使用最通用的 Exception 捕獲，確保服務不會在啟動時崩潰
-        logger.error(f"Failed to initialize Gemini Client: {e}")
-        ai_client = None
-else:
-    logger.warning("GEMINI_API_KEY not found. AI features will be disabled.")
-
 
 @app.route("/", methods=["POST"])
 def webhook():
-    """
-    接收來自 Dialogflow CX 的 Webhook 請求，執行 AI 邏輯，並回傳格式化回應。
-    """
-    # 接收 Dialogflow 傳送過來的 JSON 數據
     req = request.get_json(silent=True, force=True)
-    logger.info(f"Received Dialogflow request from user: {req.get('session', 'N/A')}")
-    
-    # 提取用戶訊息 (Dialogflow CX 格式)
-    user_message = req.get("queryResult", {}).get("queryText", "沒有收到訊息")
+    print(f"Received Dialogflow CX request: {req}")
 
-    response_text = ""
-    
-    # --- 執行 AI 邏輯 ---
-    if ai_client and user_message != "沒有收到訊息":
-        try:
-            logger.info(f"Calling Gemini with query: '{user_message}'")
-            
-            # 使用 gemini-2.5-flash 進行快速對話
-            ai_response = ai_client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=user_message
-            )
-            response_text = ai_response.text
-            
-        except Exception as e:
-            # 捕獲所有 API 錯誤或運行時錯誤，因為我們無法精確匯入 APIError
-            logger.error(f"AI Call Error: {e}. Full traceback not visible here.")
-            response_text = "AI 服務呼叫失敗。請檢查 API 金鑰或配額設定。"
+    # 嘗試從 CX 請求中獲取用戶輸入的文字和上下文
+    user_message = req.get("text", "沒有找到用戶輸入文字")
+    tag = req.get("tag", "No Tag")
+    current_page = req.get("currentPage", {}).get("displayName", "Unknown Page")
+
+    if LINE_API_KEY:
+        print(f"LINE API Key loaded successfully (first few chars): {LINE_API_KEY[:5]}...")
     else:
-        # 如果 AI client 未初始化，返回默認的檢查訊息
-        response_text = f"您說了：'{user_message}'。這是來自 Cloud Run 的測試回應。AI 功能目前處於離線狀態 (Key未配置)。"
+        print("Warning: LINE API Key not found in environment variables.")
 
-    # --- 構建 Dialogflow 期望的回應格式 ---
-    dialogflow_response = {
-        "fulfillmentMessages": [
-            {
-                "text": {
-                    "text": [response_text]
-                }
+    # ----------------------------------------------------
+    #  核心：構建 LINE Custom Payload 訊息
+    # ----------------------------------------------------
+    
+    # 1. 構建要回傳給用戶的文字內容
+    response_text = f"您在 '{current_page}' 頁面說：'{user_message}'。請問您對哪項服務感興趣？"
+    
+    # 2. 構建 LINE Quick Reply (快速回覆) 的按鈕清單
+    # 這是 LINE Messaging API 規定的 JSON 格式
+    quick_reply_items = [
+        {
+            "type": "action",
+            "action": {
+                "type": "message",
+                "label": "樂團MBTI分析",
+                "text": "我想看樂團MBTI分析結果"
             }
-        ]
+        },
+        {
+            "type": "action",
+            "action": {
+                "type": "message",
+                "label": "繳費查詢",
+                "text": "我想查詢繳費狀態"
+            }
+        },
+        {
+            "type": "action",
+            "action": {
+                "type": "message",
+                "label": "連結查詢",
+                "text": "我想查詢連結清單"
+            }
+        }
+    ]
+
+    # 3. 構建完整的 LINE 訊息 JSON 物件 (一個帶有 Quick Reply 的 Text Message)
+    line_message_json = {
+        "type": "text",
+        "text": response_text,
+        "quickReply": {
+            "items": quick_reply_items
+        }
+    }
+
+    # 4. 構建 Dialogflow CX 期望的回應格式 (使用 'payload' 欄位)
+    dialogflow_cx_response = {
+        "fulfillmentResponse": {
+            "messages": [
+                {
+                    "payload": {
+                        # 命名空間必須是 'line' 
+                        "line": line_message_json
+                    }
+                }
+            ]
+        }
     }
     
-    # 必須返回 JSON
-    return jsonify(dialogflow_response)
+    print(f"Sending CX Response: {dialogflow_cx_response}")
+    return jsonify(dialogflow_cx_response)
 
-
+# (健康檢查和啟動程式碼不變)
 @app.route("/health", methods=["GET"])
 def health_check():
-    """
-    Cloud Run 健康檢查端點。
-    """
     return "OK", 200
 
-
 if __name__ == "__main__":
-    # 確保監聽 PORT=8080 和 0.0.0.0
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
