@@ -23,7 +23,7 @@ def webhook():
     if "彩虹城市AI助理" in user_message:        
         dialogflow_cx_response = {
             "fulfillmentResponse": {
-                "messages": [{"text": {"text": [response_text]}}]
+                "messages": [{"text": {"text": [user_message]}}]
             }
         }
         return jsonify(dialogflow_cx_response)
@@ -43,3 +43,4 @@ if __name__ == "__main__":
     # 根據 Cloud Run 的環境變數設定 PORT
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
+
